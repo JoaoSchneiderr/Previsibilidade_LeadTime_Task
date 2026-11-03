@@ -1,0 +1,8 @@
+Ordem de execução (Python 3, na mesma pasta; ajuste o caminho do CSV no início de cada script se necessário):
+  1. python 01_tratamento.py Limber__1__1.csv      -> base_tratada.pkl
+  2. python 02_validacao.py  Limber__1__1.csv      -> verificações do lead time
+  3. python 03_atributos.py                        -> atributos.pkl
+  4. python 04_treino.py                           -> resultados, importância e modelo_final.joblib
+Bibliotecas: pandas, numpy, scikit-learn, xgboost, lightgbm, catboost, joblib, matplotlib.
+modelos_tcc.py precisa estar na mesma pasta para carregar o modelo_final.joblib.
+O CSV bruto não acompanha o pacote por conter dados da empresa.

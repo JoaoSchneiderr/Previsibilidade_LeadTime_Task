@@ -47,6 +47,14 @@ Até o momento, o repositório contém os seguintes artefatos principais:
 - [Proposta_TCC_PREV_LEADTIME.docx (2).pdf](Proposta_TCC_PREV_LEADTIME.docx%20(2).pdf): proposta do TCC aprovada;
 - estrutura de diretórios criada para organização do código e dos dados.
 
+Incluídos em 2026-11-03:
+
+- [reports/Processo_Tratamento_Dados_TCC.docx](reports/Processo_Tratamento_Dados_TCC.docx): documentação do tratamento dos dados (versão 3: 5ª extração, regra de subtarefas por desenvolvedor, validação do lead time e análise das tasks recentes);
+- [reports/Relatorio_Atributos_e_Treinamento.docx](reports/Relatorio_Atributos_e_Treinamento.docx): engenharia de atributos, configuração do treinamento e resultados dos cinco modelos;
+- [reports/figuras](reports/figuras): gráficos do relatório (MAE por modelo, importância dos atributos, real x previsto);
+- [data/processed/Base_Final_Lead_Time.xlsx](data/processed/Base_Final_Lead_Time.xlsx): base final tratada (4.977 linhas), com abas de atributos, resumo e validação — **contém nomes reais, não versionar**;
+- [pipeline_tcc](pipeline_tcc): scripts do tratamento, validação, atributos e treinamento, e o modelo treinado `modelo_final.joblib` — **o modelo guarda nomes reais de desenvolvedores como categorias, não versionar**.
+
 ---
 
 ## 4. Etapas executadas
@@ -187,6 +195,171 @@ Resultado esperado:
 
 ---
 
+### Etapa 7 — Ampliação da base com a 5ª extração do Jira
+
+Data: 2026-11-03
+
+Ações realizadas:
+
+- análise da 5ª extração (`Limber__1__1.csv`, 10.000 linhas e 1.027 colunas), que contém integralmente a extração anterior (4.523 linhas) e amplia o histórico de 12 para 26 meses;
+- identificação do limite de 10.000 linhas por exportação do Jira: como o arquivo está ordenado da task mais recente para a mais antiga, o corte atingiu apenas tasks anteriores a 24/07/2024;
+- definição do período da base: tasks criadas de **01/08/2024 a 21/09/2026**, descartando julho/2024, que veio incompleto (59 linhas);
+- decisão de não solicitar períodos mais antigos: 26 meses são suficientes, e dados antigos tendem a refletir outra equipe, outros processos e outros sistemas;
+- inclusão de novos campos: Vertical (99,7% preenchido), Analista de Requisitos e Origem Bug.
+
+Campos avaliados e excluídos:
+
+- **Analista de Teste** e **Story Points - Dev**: preenchidos depois do início do desenvolvimento (data leakage) — decisão do projeto;
+- **Tempo gasto**: só existe depois da execução (data leakage);
+- **Estimativa original, Data início de desenvolvimento, Equipe, Story Points de Análise/Testes, Categoria de trabalho**: preenchimento insuficiente (0% a 4%);
+- **Descrição, Cliente, Telefone Cliente, Comentários, Registro de Trabalho, Anexos**: dados sensíveis.
+
+Resultado:
+
+- base ampliada de 2.047 para 4.977 linhas após o tratamento.
+
+---
+
+### Etapa 8 — Tratamento de subtarefas por desenvolvedor
+
+Data: 2026-11-03
+
+Regra definida pela equipe:
+
+- **subtarefa do mesmo desenvolvedor do item pai** → incorporada ao pai; a data de conclusão do pai passa a ser `MAX(Resolvido do pai, Resolvido dessas subtarefas)`;
+- **subtarefa de outro desenvolvedor** → vira linha própria, atribuída a esse desenvolvedor; várias subtarefas do mesmo pai feitas pelo mesmo outro desenvolvedor são agrupadas numa linha, com lead time `MAX(Resolvido) − MIN(Criado)`;
+- **subtarefa sem desenvolvedor identificado** → incorporada ao pai;
+- **subtarefa cujo pai não está na base** → linha própria.
+
+Desenvolvedor considerado: campo `Desenvolvedor`; se vazio, `Responsável`.
+
+Números:
+
+| Situação | Quantidade |
+|---|---|
+| Subtarefas concluídas na base filtrada | 2.111 |
+| Incorporadas ao pai (mesmo desenvolvedor) | 1.512 |
+| Incorporadas ao pai (desenvolvedor não identificado) | 142 |
+| Subtarefas de outro desenvolvedor | 300 (agrupadas em 157 linhas) |
+| Subtarefas sem pai na base | 157 |
+| Itens pai com data de conclusão estendida | 96 |
+
+Correção: na versão anterior, itens pai vinculados a um Epic (pelo campo `Chave pai`) não recebiam a data das suas subtarefas. Corrigido nesta versão.
+
+Evolução da base:
+
+| Etapa | Linhas |
+|---|---|
+| Extração bruta | 10.000 |
+| Resolução = Concluídos e sem Epic | 6.833 |
+| Após tratamento de subtarefas | 5.036 |
+| Após recorte do período (a partir de 01/08/2024) | **4.977** (3.773 ERP, 1.204 CARD) |
+
+Script: [pipeline_tcc/01_tratamento.py](pipeline_tcc/01_tratamento.py)
+
+---
+
+### Etapa 9 — Validação do cálculo do lead time
+
+Data: 2026-11-03
+
+Ações realizadas:
+
+- recálculo do lead time de todas as 4.977 linhas diretamente do CSV bruto, por uma segunda implementação independente (Python puro, `csv` + `datetime.strptime`), sem reutilizar o código do tratamento;
+- conferência manual de uma amostra de 8 linhas cobrindo todas as situações da regra de subtarefas.
+
+Verificações (todas **OK**):
+
+- mesma quantidade de linhas e mesmo conjunto de chaves no recálculo e na base;
+- lead time idêntico ao recálculo (diferença máxima de 0 h);
+- `lead_time_horas = (Resolvido_efetivo − Criado) / 3600`;
+- nenhum lead time negativo ou vazio;
+- `Resolvido_efetivo ≥ Resolvido` do próprio item;
+- chaves únicas; subtarefas incorporadas não aparecem como linha própria;
+- nenhuma task criada antes de 01/08/2024.
+
+Pontos de atenção (mantidos e documentados como ruído do alvo):
+
+- 345 linhas com fechamento em lote (10 ou mais tasks resolvidas no mesmo minuto, provavelmente no fechamento de versões);
+- subtarefas encerradas meses depois do item pai (ex.: ERP-5183, 242 dias);
+- 93 tasks com lead time menor que 1 hora e 29 maiores que 1 ano.
+
+Lead time da base final: mediana 363 h, média 954 h, máximo 17.788 h.
+
+Script: [pipeline_tcc/02_validacao.py](pipeline_tcc/02_validacao.py) — resultados nas abas `Validação*` da base final.
+
+---
+
+### Etapa 10 — Análise da redução do lead time nas tasks recentes
+
+Data: 2026-11-03
+
+- O lead time mediano do 3º trimestre de 2026 caiu para 165 h (trimestres anteriores: 234 h a 590 h). Segundo a equipe, isso está associado ao **uso de IA como apoio aos desenvolvedores**.
+- Para separar esse efeito do viés das tasks ainda abertas (a base só tem tasks concluídas, e das recentes só as rápidas já terminaram), comparou-se o percentual resolvido em até 7 e 30 dias com a mesma janela de observação para todos os trimestres.
+- Resultado: 3º tri/2026 com 27,1% em 7 dias e 51,2% em 30 dias, contra médias históricas de 25,3% e 50,8%. Há melhora em relação ao 1º semestre de 2026, mas o patamar é semelhante ao histórico: a maior parte da queda da mediana vem das 250 tasks do trimestre ainda abertas na extração.
+- Decisão: manter todas as tasks na base e reportar também o erro no subconjunto de teste com pelo menos 90 dias de observação.
+
+---
+
+### Etapa 11 — Engenharia de atributos
+
+Data: 2026-11-03
+
+Somente informações disponíveis no momento da criação da task. Os atributos históricos usam apenas eventos anteriores à criação.
+
+| Grupo | Atributos |
+|---|---|
+| Categóricos (vazio = "não informado") | tipo_item, projeto, modulo, complexidade, vertical, origem_bug, desenvolvedor, analista_requisitos |
+| Ordinais / binários | prioridade_ord, complexidade_ord, eh_subtarefa, vinculada_epic |
+| Título | titulo_caracteres, titulo_palavras |
+| Calendário | mes_criacao, dia_semana_criacao, hora_criacao |
+| Contexto histórico | carga_dev_abertas e backlog_projeto_abertas (tasks abertas criadas nos 90 dias anteriores), dev_tasks_concluidas_antes, dev_lead_time_mediano_passado, tipo_lead_time_mediano_passado |
+
+Fora do modelo: Analista de Teste, Story Points - Dev, Tempo gasto, histórico de status, Sprint, quantidade de subtarefas incorporadas e Descrição.
+
+Script: [pipeline_tcc/03_atributos.py](pipeline_tcc/03_atributos.py)
+
+---
+
+### Etapa 12 — Treinamento e comparação dos modelos
+
+Data: 2026-11-03
+
+Configuração:
+
+- divisão temporal 80/20: treino com 3.981 tasks (01/08/2024 a 28/01/2026), teste com 996 tasks (28/01/2026 a 21/09/2026);
+- busca em grade com validação walk-forward (`TimeSeriesSplit`, 5 blocos) no treino, critério MAE;
+- alvo treinado em `log1p(lead_time_horas)`, previsões convertidas para horas;
+- one-hot nos categóricos (CatBoost com categorias nativas); `random_state = 42`;
+- baseline da proposta: média do treino por Tipo de item × Complexidade; adicionalmente, a mediana pelos mesmos grupos.
+
+Resultados reais no conjunto de teste:
+
+| Modelo | MAE (h) | RMSE (h) | R² | MdAE (h) | MAE teste ≥90 dias (h) |
+|---|---|---|---|---|---|
+| Baseline — média | 766 | 971 | −0,068 | 645 | 771 |
+| Baseline — mediana | 567 | 941 | −0,003 | 297 | 690 |
+| Gradient Boosting | 530 | 925 | 0,030 | 229 | 655 |
+| Random Forest | 515 | 913 | 0,056 | 229 | 645 |
+| XGBoost | 513 | 910 | 0,062 | 220 | 647 |
+| **LightGBM** | **507** | 909 | 0,063 | **206** | 642 |
+| CatBoost | 509 | **906** | **0,070** | 224 | **638** |
+
+Conclusões:
+
+- todos os modelos superam os baselines; o LightGBM tem o menor MAE (507 h ≈ 21 dias), 34% abaixo do baseline pela média e 11% abaixo do baseline pela mediana;
+- LightGBM, CatBoost, XGBoost e Random Forest ficam praticamente empatados (diferença < 8 h de MAE);
+- **R² baixo (até 0,07)**: os atributos disponíveis na criação explicam pouco da variação do lead time, que inclui filas, esperas e dependências não registradas — limitação a registrar na monografia;
+- erro mais realista: cerca de 640 h nas tasks do teste com pelo menos 90 dias de observação;
+- atributos mais influentes (importância por permutação): experiência do desenvolvedor, tipo de item, vertical, prioridade e lead time mediano passado do desenvolvedor;
+- modelo final: **LightGBM** (learning_rate 0,03; num_leaves 15; n_estimators 300), salvo em `pipeline_tcc/modelo_final.joblib` com a lista de atributos usados.
+
+Script: [pipeline_tcc/04_treino.py](pipeline_tcc/04_treino.py) — detalhes em [reports/Relatorio_Atributos_e_Treinamento.docx](reports/Relatorio_Atributos_e_Treinamento.docx).
+
+Observação: os scripts desta etapa foram desenvolvidos fora da estrutura `src/` e trabalham sobre a base com nomes reais. A migração para `src/` e para a base anonimizada está entre os próximos passos.
+
+---
+
 ## 5. Estrutura de desenvolvimento planejada
 
 A arquitetura do projeto, conforme os documentos do escopo, prevê as seguintes camadas:
@@ -303,134 +476,75 @@ Durante o desenvolvimento, as seguintes regras devem ser respeitadas rigorosamen
 
 ## 7. Próximos passos previstos
 
-A sequência esperada de trabalho para continuar o desenvolvimento é a seguinte:
+Os passos 1 a 6 do planejamento original (pipeline de dados, cálculo e validação do lead time, engenharia de atributos, preparação dos dados, treinamento, comparação e seleção do modelo) foram executados nas etapas 7 a 12. Restam os passos abaixo, em ordem de prioridade.
 
-### Passo 1 — Definir o pipeline de dados
+### Passo 1 — Proteger os dados sensíveis no repositório
 
 Objetivo:
 
-- estabelecer a rotina de carregamento e validação da base de dados.
+- cumprir a Regra 9 antes de qualquer commit.
 
 Tarefas:
 
-- criar módulo de importação;
-- validar colunas esperadas;
-- tratar tipos de dados;
-- identificar valores ausentes e inconsistentes;
-- preparar a estrutura de dados para cálculo do lead time.
+- criar um `.gitignore` que exclua `data/processed/Base_Final_Lead_Time.xlsx`, `pipeline_tcc/modelo_final.joblib`, os exports do Jira (`*.csv` brutos) e os arquivos `.pkl` intermediários;
+- conferir com `git status` que nenhum desses arquivos está rastreado.
 
 ---
 
-### Passo 2 — Implementar cálculo do lead time
+### Passo 2 — Migrar o pipeline para `src/` e para a base anonimizada
 
 Objetivo:
 
-- transformar a base bruta em uma tabela com target calculado.
+- cumprir as Regras 5 e 9, mantendo os resultados reproduzíveis.
 
 Tarefas:
 
-- verificar data de criação e data de conclusão;
-- calcular a diferença em horas;
-- padronizar a unidade da variável alvo;
-- validar resultados e inconsistências.
+- distribuir a lógica de `pipeline_tcc/` nos módulos existentes: tratamento em `src/data/data_pipeline.py`, regra de subtarefas e lead time em `src/features/lead_time_calculation.py`, atributos em `src/features/`, treinamento em `src/models/`, métricas e importância em `src/evaluation/`;
+- aplicar `src/data/anonymize_data.py` sobre a base da 5ª extração (desenvolvedores e analistas como `DEV_001`, `ANALISTA_001` etc.) antes do treinamento;
+- retreinar e confirmar que as métricas não mudam (a anonimização só troca rótulos);
+- transformar as verificações de `02_validacao.py` em testes em `tests/`.
 
 ---
 
-### Passo 3 — Realizar engenharia de atributos
+### Passo 3 — Script de consulta sob demanda (inferência)
 
 Objetivo:
 
-- gerar variáveis úteis para a predição.
+- cumprir o sétimo objetivo específico: prever o lead time de uma task nova informada pelo gerente.
 
 Tarefas:
 
-- extrair atributos de título e descrição;
-- transformar variáveis categóricas;
-- criar features temporais e contextuais;
-- registrar quais variáveis foram usadas.
+- criar script de linha de comando que receba os dados da task (tipo, projeto, prioridade, módulo, complexidade, vertical, origem bug, desenvolvedor, analista de requisitos, título);
+- calcular os atributos de contexto (experiência, carga e medianas passadas do desenvolvedor) a partir de uma extração recente do Jira;
+- carregar o modelo salvo e devolver o lead time estimado em horas e dias;
+- permitir simular a mesma task com desenvolvedores diferentes, apoiando a alocação.
 
 ---
 
-### Passo 4 — Preparar os dados para treinamento
-
-Objetivo:
-
-- montar a base final para modelagem.
+### Passo 4 — Refinar o modelo (opcional)
 
 Tarefas:
 
-- separar treino e teste temporalmente;
-- aplicar pré-processamento;
-- definir baseline inicial;
-- preparar pipeline modular de treinamento.
+- obter a data aproximada de início do uso de IA pela equipe e incluir o atributo binário "período com IA";
+- retirar atributos de contribuição nula ou negativa (tamanho do título, mês de criação, carga do desenvolvedor, complexidade categórica);
+- testar palavras-chave do título como atributos textuais, já que a Descrição não pode ser usada;
+- retreinar e comparar com os resultados da Etapa 12.
 
 ---
 
-### Passo 5 — Treinar e comparar modelos
-
-Objetivo:
-
-- avaliar diferentes algoritmos de regressão.
+### Passo 5 — Documentação e apresentação do estudo
 
 Tarefas:
 
-- treinar Gradient Boosting;
-- treinar Random Forest;
-- treinar XGBoost;
-- treinar LightGBM;
-- treinar CatBoost;
-- comparar métricas realistas.
-
----
-
-### Passo 6 — Avaliar o melhor modelo
-
-Objetivo:
-
-- selecionar o modelo com melhor desempenho.
-
-Tarefas:
-
-- calcular MAE, RMSE e R²;
-- comparar modelos com baseline;
-- analisar erros e ajustes;
-- registrar indicadores de desempenho com evidência real.
-
----
-
-### Passo 7 — Persistência e inferência
-
-Objetivo:
-
-- preparar o sistema para prever novas tasks.
-
-Tarefas:
-
-- salvar o modelo vencedor;
-- armazenar preprocessamento;
-- criar rotina de predição para nova task;
-- exportar valor estimado de lead time.
-
----
-
-### Passo 8 — Documentação e apresentação do estudo
-
-Objetivo:
-
-- consolidar o resultado do projeto para apresentação acadêmica.
-
-Tarefas:
-
-- gerar relatórios e gráficos;
-- registrar variáveis importantes;
-- documentar metodologia e limitações;
-- produzir material para discussão do TCC.
+- levar resultados, figuras e limitações para o capítulo de resultados da monografia;
+- registrar as limitações: baixo poder explicativo dos atributos disponíveis na criação, preenchimento parcial de Complexidade e Módulo, ruído do alvo (fechamentos em lote) e viés das tasks recentes ainda abertas;
+- preparar o material de apresentação para a banca.
 
 ---
 
 ## 8. Situação atual
 
-Status do projeto em 2026-10-09:
+Status do projeto em 2026-11-03:
 
 - [x] análise do escopo e requisitos do TCC;
 - [x] leitura da especificação técnica do projeto;
@@ -439,14 +553,20 @@ Status do projeto em 2026-10-09:
 - [x] coleta e organização da base extraída do Jira;
 - [x] registro do processo documental da coleta e tratamento;
 - [x] implementação do pipeline inicial de validação e preparação da base;
-- [x] anonimização de nomes e situações sensíveis;
+- [x] anonimização de nomes e situações sensíveis (base anterior);
 - [x] implementação do cálculo do lead time na base anonimizada;
-- [ ] validação executada do cálculo do lead time na tabela final;
-- [ ] engenharia de atributos;
-- [ ] treinamento dos modelos;
-- [ ] comparação de desempenho;
-- [ ] persistência do modelo vencedor;
-- [ ] inferência para nova task.
+- [x] ampliação da base com a 5ª extração (26 meses, 4.977 linhas);
+- [x] tratamento de subtarefas por desenvolvedor;
+- [x] validação executada do cálculo do lead time na tabela final;
+- [x] engenharia de atributos;
+- [x] treinamento dos modelos;
+- [x] comparação de desempenho;
+- [x] persistência do modelo vencedor (LightGBM);
+- [ ] proteção dos dados sensíveis no repositório (`.gitignore`);
+- [ ] migração do pipeline para `src/` e para a base anonimizada;
+- [ ] inferência para nova task (script de consulta sob demanda);
+- [ ] refinamento do modelo (opcional);
+- [ ] redação dos resultados na monografia.
 
 ---
 
@@ -465,11 +585,10 @@ A manutenção deste registro é importante para garantir:
 
 ## 10. Próximo registro a ser incluído
 
-O próximo documento de evolução deverá incluir:
+O próximo registro deverá incluir:
 
-- módulos criados em src/;
-- código implementado por etapa;
-- testes executados;
-- resultados reais de treinamento;
-- decisões metodológicas tomadas;
-- versões e ajustes em cada iteração.
+- a criação do `.gitignore` e a conferência dos arquivos rastreados;
+- os módulos migrados para `src/` e os testes criados em `tests/`;
+- a confirmação das métricas após o retreino com a base anonimizada;
+- o script de consulta sob demanda e exemplos reais de uso;
+- eventuais ajustes do modelo (atributo de uso de IA, remoção de atributos) e seus resultados.
