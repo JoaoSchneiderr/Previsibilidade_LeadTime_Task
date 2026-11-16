@@ -1,8 +1,43 @@
-Ordem de execução (Python 3, na mesma pasta; ajuste o caminho do CSV no início de cada script se necessário):
-  1. python 01_tratamento.py Limber__1__1.csv      -> base_tratada.pkl
-  2. python 02_validacao.py  Limber__1__1.csv      -> verificações do lead time
-  3. python 03_atributos.py                        -> atributos.pkl
-  4. python 04_treino.py                           -> resultados, importância e modelo_final.joblib
-Bibliotecas: pandas, numpy, scikit-learn, xgboost, lightgbm, catboost, joblib, matplotlib.
-modelos_tcc.py precisa estar na mesma pasta para carregar o modelo_final.joblib.
-O CSV bruto não acompanha o pacote por conter dados da empresa.
+PIPELINE DO TCC — Previsão do Lead Time de Tasks de Sprint
+==========================================================
+
+Preparação (uma vez, na pasta do projeto, com o .venv ativado):
+  pip install -r requirements.txt
+  Coloque a exportação do Jira em data/raw/Limber__1__1.csv  (a pasta data/ não vai para o GitHub)
+
+Ordem de execução (sempre a partir da pasta do projeto):
+  1. python pipeline_tcc/01_tratamento.py   -> filtros, regra de subtarefas e lead time
+  2. python pipeline_tcc/02_validacao.py    -> recálculo independente e verificações do lead time
+  3. python pipeline_tcc/03_atributos.py    -> atributos do modelo (só informações da criação da task)
+  4. python pipeline_tcc/04_treino.py       -> treino dos 5 modelos, métricas, importância e modelo_final.joblib
+  5. python pipeline_tcc/05_consulta.py     -> consulta sob demanda para tasks novas
+
+Os passos 1 a 4 gravam os arquivos intermediários em pipeline_tcc/saidas/.
+Para usar outra exportação, passe o caminho do CSV como argumento nos passos 1 a 3
+ou use --historico no passo 5.
+
+Consulta sob demanda (exemplos):
+  python pipeline_tcc/05_consulta.py --tipo Bug --projeto ERP --prioridade High --vertical Agro ^
+      --modulo Financeiro --titulo "Erro ao gerar boleto" --desenvolvedor "Nome do Dev"
+
+  Simular a mesma task com vários desenvolvedores (apoio à alocação):
+  python pipeline_tcc/05_consulta.py --tipo Melhoria --projeto CARD --titulo "Novo filtro" ^
+      --desenvolvedor "Dev A" "Dev B" "Dev C"
+
+  Várias tasks de um CSV:
+  python pipeline_tcc/05_consulta.py --arquivo pipeline_tcc/exemplos/tasks_exemplo_MOCK.csv --saida previsoes.csv
+
+  Valores aceitos em cada campo:      python pipeline_tcc/05_consulta.py --listar-valores
+  Mostrar os atributos da previsão:   acrescente --detalhes
+
+  (No PowerShell troque o ^ do fim da linha por `; no Git Bash use \ ; ou escreva tudo numa linha só.)
+
+Testes:
+  pytest -q        (os testes com dados reais são pulados se a exportação ou o modelo não estiverem na máquina)
+
+Arquivos:
+  comum.py          caminhos, leitura de datas, tratamento e atributos — usado pelo treino E pela consulta,
+                    o que garante que uma task nova seja descrita do mesmo jeito que as tasks do treino
+  modelos_tcc.py    adaptação do CatBoost para a busca em grade do scikit-learn
+  exemplos/         tasks fictícias (SAMPLE / MOCK DATA) para testar a consulta
+  modelo_final.joblib  modelo treinado (LightGBM) — contém nomes reais como categorias: não versionar

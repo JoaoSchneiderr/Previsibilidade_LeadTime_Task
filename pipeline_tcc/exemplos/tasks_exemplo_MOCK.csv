@@ -1,0 +1,9 @@
+# SAMPLE / MOCK DATA - tasks fictícias para testar o script de consulta. Não usar como resultado do TCC.
+# Os desenvolvedores são marcadores (DEV_EXEMPLO_n); para simular com a equipe real, troque pelos nomes do Jira.
+tipo,projeto,prioridade,modulo,complexidade,vertical,origem_bug,desenvolvedor,analista_requisitos,titulo,data_criacao,chave_pai
+Bug,ERP,High,Financeiro,Low,Agro,Sim,DEV_EXEMPLO_1,,Erro ao gerar boleto com desconto,2026-09-15 09:30,
+Bug,CARD,Highest,,,Turismo,Sim,DEV_EXEMPLO_2,,Pagamento recusado no totem após atualização,2026-09-15 10:00,
+Melhoria,ERP,Medium,Vendas,Medium,Varejo,Não,DEV_EXEMPLO_1,ANALISTA_EXEMPLO_1,Novo filtro por vendedor no relatório de vendas,2026-09-16 14:00,ERP-0000
+Novas Funcionalidades,ERP,Medium,Compras,High,Agro,,DEV_EXEMPLO_3,ANALISTA_EXEMPLO_1,Integração do pedido de compra com o portal do fornecedor,2026-09-17 08:15,ERP-0000
+Tarefa,CARD,Low,,,Turismo,,,,Atualizar biblioteca de pagamento,2026-09-18 16:40,
+Subtarefa - Bug,ERP,Medium,Fiscal,Low,Fiscal,Sim,DEV_EXEMPLO_2,,Ajustar validação do registro C100,2026-09-19 11:20,ERP-0001

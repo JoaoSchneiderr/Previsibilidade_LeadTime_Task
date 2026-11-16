@@ -55,6 +55,16 @@ Incluídos em 2026-11-03:
 - [data/processed/Base_Final_Lead_Time.xlsx](data/processed/Base_Final_Lead_Time.xlsx): base final tratada (4.977 linhas), com abas de atributos, resumo e validação — **contém nomes reais, não versionar**;
 - [pipeline_tcc](pipeline_tcc): scripts do tratamento, validação, atributos e treinamento, e o modelo treinado `modelo_final.joblib` — **o modelo guarda nomes reais de desenvolvedores como categorias, não versionar**.
 
+Incluídos em 2026-11-16:
+
+- [pipeline_tcc/05_consulta.py](pipeline_tcc/05_consulta.py): script de consulta sob demanda (inferência para task nova);
+- [pipeline_tcc/comum.py](pipeline_tcc/comum.py): funções compartilhadas pelo treino e pela consulta (caminhos, datas, tratamento, atributos);
+- [pipeline_tcc/exemplos/tasks_exemplo_MOCK.csv](pipeline_tcc/exemplos/tasks_exemplo_MOCK.csv): tasks fictícias (SAMPLE / MOCK DATA) para testar a consulta;
+- [tests/test_consulta.py](tests/test_consulta.py): testes automatizados da consulta;
+- [requirements.txt](requirements.txt): dependências com versões fixas;
+- [.gitignore](.gitignore): exclui dados reais, modelo e arquivos intermediários do versionamento;
+- `data/raw/Limber__1__1.csv`: exportação do Jira usada pelo pipeline e pela consulta — **não versionar** (coberta pelo `.gitignore`).
+
 ---
 
 ## 4. Etapas executadas
@@ -360,6 +370,44 @@ Observação: os scripts desta etapa foram desenvolvidos fora da estrutura `src/
 
 ---
 
+### Etapa 13 — Script de consulta sob demanda, dependências e proteção dos dados
+
+Data: 2026-11-16
+
+Ações realizadas:
+
+- criação de [pipeline_tcc/comum.py](pipeline_tcc/comum.py), que concentra o tratamento e a construção dos atributos; o treino (`03_atributos.py`) e a consulta (`05_consulta.py`) usam as mesmas funções, garantindo que uma task nova seja descrita exatamente como as tasks do treino;
+- scripts `01` a `04` passaram a usar caminhos relativos ao projeto (exportação em `data/raw/`, intermediários em `pipeline_tcc/saidas/`);
+- reexecução completa do pipeline após a reorganização: base, validação (9/9 OK), atributos e métricas **idênticos** aos da Etapa 12 (LightGBM, MAE 507 h);
+- o modelo salvo passou a guardar também as métricas de teste, exibidas pela consulta;
+- criação de [pipeline_tcc/05_consulta.py](pipeline_tcc/05_consulta.py) (sétimo objetivo específico).
+
+O que o script de consulta faz:
+
+- recebe os campos conhecidos na criação da task (tipo, projeto, prioridade, módulo, complexidade, vertical, origem bug, desenvolvedor, analista de requisitos, título, data);
+- calcula o contexto do desenvolvedor (experiência, carga atual, lead time passado) a partir da exportação do Jira mais recente;
+- devolve o lead time previsto em horas e dias, lembrando o erro típico do modelo (mediana 206 h, MAE 507 h);
+- aceita vários desenvolvedores para a mesma task (simulação de alocação, saída ordenada do menor para o maior prazo);
+- aceita um CSV com várias tasks (`--arquivo`, `--saida`);
+- avisa quando um valor não foi visto no treino e quando a exportação está desatualizada (mais de 7 dias);
+- `--detalhes` mostra todos os atributos usados na previsão (Regra 7) e `--listar-valores` mostra os valores aceitos.
+
+Testes ([tests/test_consulta.py](tests/test_consulta.py), 7 testes, todos aprovados):
+
+- campos vazios viram "não informado" e atributos básicos calculados corretamente;
+- paridade treino × consulta: 60 tasks da base, descritas pelo caminho da consulta, geram exatamente os atributos usados no treino;
+- consulta em lote com as tasks MOCK, consulta determinística e simulação com vários desenvolvedores;
+- os testes que dependem da exportação ou do modelo são pulados quando esses arquivos não estão na máquina.
+
+Dependências e versionamento:
+
+- [requirements.txt](requirements.txt) com versões fixas (compatíveis com Python 3.13 e 3.14); o modelo salvo exige as mesmas versões do scikit-learn e do LightGBM;
+- [.gitignore](.gitignore) cobrindo exportações do Jira, `data/raw/`, `data/processed/`, `*.joblib`, `*.pkl`, `pipeline_tcc/saidas/` e `.venv/`.
+
+Atenção: o `.gitignore` só impede novos envios. A exportação `Extração_limpa_final.xlsx`, a base `data/processed/Base_Final_Lead_Time.xlsx` e o `pipeline_tcc/modelo_final.joblib` já constam nos commits enviados ao GitHub em 2026-10-09 e 2026-11-03. Ver Passo 1 da seção 7.
+
+---
+
 ## 5. Estrutura de desenvolvimento planejada
 
 A arquitetura do projeto, conforme os documentos do escopo, prevê as seguintes camadas:
@@ -476,75 +524,58 @@ Durante o desenvolvimento, as seguintes regras devem ser respeitadas rigorosamen
 
 ## 7. Próximos passos previstos
 
-Os passos 1 a 6 do planejamento original (pipeline de dados, cálculo e validação do lead time, engenharia de atributos, preparação dos dados, treinamento, comparação e seleção do modelo) foram executados nas etapas 7 a 12. Restam os passos abaixo, em ordem de prioridade.
+O sétimo objetivo específico (script de consulta) foi concluído na Etapa 13. Restam os passos abaixo, em ordem de prioridade.
 
-### Passo 1 — Proteger os dados sensíveis no repositório
-
-Objetivo:
-
-- cumprir a Regra 9 antes de qualquer commit.
-
-Tarefas:
-
-- criar um `.gitignore` que exclua `data/processed/Base_Final_Lead_Time.xlsx`, `pipeline_tcc/modelo_final.joblib`, os exports do Jira (`*.csv` brutos) e os arquivos `.pkl` intermediários;
-- conferir com `git status` que nenhum desses arquivos está rastreado.
-
----
-
-### Passo 2 — Migrar o pipeline para `src/` e para a base anonimizada
+### Passo 1 — Retirar do GitHub os dados reais já enviados
 
 Objetivo:
 
-- cumprir as Regras 5 e 9, mantendo os resultados reproduzíveis.
+- cumprir a Regra 9: arquivos com nomes reais já estão em commits enviados ao repositório.
 
 Tarefas:
 
-- distribuir a lógica de `pipeline_tcc/` nos módulos existentes: tratamento em `src/data/data_pipeline.py`, regra de subtarefas e lead time em `src/features/lead_time_calculation.py`, atributos em `src/features/`, treinamento em `src/models/`, métricas e importância em `src/evaluation/`;
-- aplicar `src/data/anonymize_data.py` sobre a base da 5ª extração (desenvolvedores e analistas como `DEV_001`, `ANALISTA_001` etc.) antes do treinamento;
-- retreinar e confirmar que as métricas não mudam (a anonimização só troca rótulos);
-- transformar as verificações de `02_validacao.py` em testes em `tests/`.
+- se o repositório for público, torná-lo privado no GitHub até a limpeza;
+- parar de rastrear os arquivos, sem apagá-los do computador: `git rm --cached "Extração_limpa_final.xlsx" data/processed/Base_Final_Lead_Time.xlsx pipeline_tcc/modelo_final.joblib`, seguido de commit;
+- para removê-los também do histórico, reescrevê-lo (por exemplo, com `git filter-repo`) e enviar com `--force`;
+- conferir com `git status` e `git ls-files` que nenhum arquivo de dados está rastreado.
 
 ---
 
-### Passo 3 — Script de consulta sob demanda (inferência)
-
-Objetivo:
-
-- cumprir o sétimo objetivo específico: prever o lead time de uma task nova informada pelo gerente.
+### Passo 2 — Monografia
 
 Tarefas:
 
-- criar script de linha de comando que receba os dados da task (tipo, projeto, prioridade, módulo, complexidade, vertical, origem bug, desenvolvedor, analista de requisitos, título);
-- calcular os atributos de contexto (experiência, carga e medianas passadas do desenvolvedor) a partir de uma extração recente do Jira;
-- carregar o modelo salvo e devolver o lead time estimado em horas e dias;
-- permitir simular a mesma task com desenvolvedores diferentes, apoiando a alocação.
+- metodologia: registrar o que mudou desde a proposta (Descrição excluída, regra de subtarefas por desenvolvedor, alvo em escala logarítmica, baseline pela mediana, lista final de atributos);
+- resultados e discussão a partir de [reports/Relatorio_Atributos_e_Treinamento.docx](reports/Relatorio_Atributos_e_Treinamento.docx);
+- conclusão e limitações: baixo poder explicativo dos atributos disponíveis na criação, preenchimento parcial de Complexidade e Módulo, ruído do alvo (fechamentos em lote) e viés das tasks recentes ainda abertas.
 
 ---
 
-### Passo 4 — Refinar o modelo (opcional)
+### Passo 3 — Defesa do TCC I (30/11 a 05/12/2026)
 
 Tarefas:
 
-- obter a data aproximada de início do uso de IA pela equipe e incluir o atributo binário "período com IA";
-- retirar atributos de contribuição nula ou negativa (tamanho do título, mês de criação, carga do desenvolvedor, complexidade categórica);
-- testar palavras-chave do título como atributos textuais, já que a Descrição não pode ser usada;
-- retreinar e comparar com os resultados da Etapa 12.
+- montar os slides seguindo o roteiro de 18 slides (Claude Doc "Roteiro dos Slides — Defesa do TCC I");
+- capturar o print da consulta para o slide de demonstração, com nomes de desenvolvedores trocados;
+- ensaiar a apresentação (cerca de 20 minutos) e as respostas às perguntas prováveis da banca.
 
 ---
 
-### Passo 5 — Documentação e apresentação do estudo
+### Passo 4 — TCC II
 
 Tarefas:
 
-- levar resultados, figuras e limitações para o capítulo de resultados da monografia;
-- registrar as limitações: baixo poder explicativo dos atributos disponíveis na criação, preenchimento parcial de Complexidade e Módulo, ruído do alvo (fechamentos em lote) e viés das tasks recentes ainda abertas;
-- preparar o material de apresentação para a banca.
+- migrar o pipeline de `pipeline_tcc/` para `src/` e retreinar com a base anonimizada (Regras 5 e 9);
+- incluir o atributo "período com IA" (falta a data aproximada de início do uso de IA pela equipe);
+- retirar atributos de contribuição nula ou negativa e testar palavras-chave do título;
+- avaliar se a diferença entre os melhores modelos é estatisticamente significativa;
+- repetir a análise das tasks recentes numa nova extração.
 
 ---
 
 ## 8. Situação atual
 
-Status do projeto em 2026-11-03:
+Status do projeto em 2026-11-16:
 
 - [x] análise do escopo e requisitos do TCC;
 - [x] leitura da especificação técnica do projeto;
@@ -562,11 +593,15 @@ Status do projeto em 2026-11-03:
 - [x] treinamento dos modelos;
 - [x] comparação de desempenho;
 - [x] persistência do modelo vencedor (LightGBM);
-- [ ] proteção dos dados sensíveis no repositório (`.gitignore`);
-- [ ] migração do pipeline para `src/` e para a base anonimizada;
-- [ ] inferência para nova task (script de consulta sob demanda);
-- [ ] refinamento do modelo (opcional);
-- [ ] redação dos resultados na monografia.
+- [x] inferência para nova task (script de consulta sob demanda) e testes;
+- [x] arquivo de dependências (`requirements.txt`);
+- [x] `.gitignore` para dados reais e modelo;
+- [x] roteiro dos slides da defesa;
+- [ ] retirada dos dados reais já enviados ao GitHub;
+- [ ] redação da monografia (metodologia, resultados, conclusão);
+- [ ] slides, ensaio e defesa do TCC I;
+- [ ] migração do pipeline para `src/` e base anonimizada (TCC II);
+- [ ] refinamento do modelo (TCC II).
 
 ---
 
@@ -587,8 +622,6 @@ A manutenção deste registro é importante para garantir:
 
 O próximo registro deverá incluir:
 
-- a criação do `.gitignore` e a conferência dos arquivos rastreados;
-- os módulos migrados para `src/` e os testes criados em `tests/`;
-- a confirmação das métricas após o retreino com a base anonimizada;
-- o script de consulta sob demanda e exemplos reais de uso;
-- eventuais ajustes do modelo (atributo de uso de IA, remoção de atributos) e seus resultados.
+- a retirada dos dados reais do GitHub e a conferência dos arquivos rastreados;
+- o andamento da monografia e o resultado da defesa do TCC I;
+- no TCC II: os módulos migrados para `src/`, a confirmação das métricas com a base anonimizada e os ajustes do modelo.

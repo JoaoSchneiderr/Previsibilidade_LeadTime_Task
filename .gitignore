@@ -1,0 +1,35 @@
+# ---------------------------------------------------------------
+# Dados reais e sensíveis (Regra 9 do CLAUDE.md) — nunca versionar
+# ---------------------------------------------------------------
+# exportações do Jira e bases derivadas
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+Extração_limpa_final.xlsx
+Limber*.csv
+
+# modelo treinado (guarda nomes reais de desenvolvedores como categorias)
+*.joblib
+*.pkl
+
+# saídas intermediárias do pipeline
+pipeline_tcc/saidas/
+catboost_info/
+
+# credenciais
+.env
+*.env
+
+# ---------------------------------------------------------------
+# Python / ambiente
+# ---------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# arquivos temporários do Office
+~$*

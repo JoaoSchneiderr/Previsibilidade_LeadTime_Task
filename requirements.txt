@@ -1,0 +1,23 @@
+# Dependências do projeto — Previsão do Lead Time de Tasks de Sprint (TCC)
+# Testado com Python 3.13 e 3.14. Versões fixas para reprodutibilidade:
+# o modelo salvo (pipeline_tcc/modelo_final.joblib) precisa da MESMA versão do scikit-learn e do LightGBM.
+# Instalação:  pip install -r requirements.txt   (ou: uv pip install -r requirements.txt)
+
+# dados
+pandas==3.0.6
+numpy==2.5.3
+openpyxl==3.1.5
+
+# modelos
+scikit-learn==1.9.1
+scipy==1.18.1
+xgboost==3.4.1
+lightgbm==4.7.0
+catboost==1.2.10
+joblib==1.6.0
+
+# gráficos
+matplotlib==3.11.2
+
+# testes
+pytest==9.1.1

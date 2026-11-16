@@ -1,5 +1,6 @@
 """
 Etapa 2: validação do cálculo do lead time.
+Uso:  python pipeline_tcc/02_validacao.py [caminho_da_exportacao.csv]
 Recalcula o lead time de todas as linhas a partir do CSV bruto, com uma implementação
 independente (Python puro, datetime.strptime), e confere as regras da tabela final.
 """
@@ -8,8 +9,10 @@ from datetime import datetime
 from collections import defaultdict
 import pandas as pd
 
-SRC = sys.argv[1] if len(sys.argv) > 1 else 'Limber__1__1.csv'
-BASE = sys.argv[2] if len(sys.argv) > 2 else 'base_tratada.pkl'
+from comum import CSV_PADRAO, SAIDAS  # só caminhos: o cálculo abaixo é independente do comum.py
+
+SRC = sys.argv[1] if len(sys.argv) > 1 else CSV_PADRAO
+BASE = SAIDAS / 'base_tratada.pkl'
 
 MES = {'jan': 'Jan', 'fev': 'Feb', 'mar': 'Mar', 'abr': 'Apr', 'mai': 'May', 'jun': 'Jun',
        'jul': 'Jul', 'ago': 'Aug', 'set': 'Sep', 'out': 'Oct', 'nov': 'Nov', 'dez': 'Dec'}
@@ -106,5 +109,5 @@ sanidade = pd.DataFrame([
     ('Mediana (h)', round(lt.median(), 1)), ('Média (h)', round(lt.mean(), 1)), ('Máximo (h)', round(lt.max(), 1)),
 ], columns=['Indicador', 'Valor'])
 
-checks.to_pickle('validacao_checks.pkl'); am.to_pickle('validacao_amostra.pkl'); sanidade.to_pickle('validacao_sanidade.pkl')
+checks.to_pickle(SAIDAS / 'validacao_checks.pkl'); am.to_pickle(SAIDAS / 'validacao_amostra.pkl'); sanidade.to_pickle(SAIDAS / 'validacao_sanidade.pkl')
 print(checks.to_string()); print(am.to_string()); print(sanidade.to_string())
